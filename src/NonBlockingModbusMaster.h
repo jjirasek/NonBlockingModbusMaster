@@ -88,15 +88,19 @@ class NonBlockingModbusMaster {
     uint8_t getError(); // 0 is OK else error
     bool retry(); // returns true if retry started, else false, some other command still running, reruns the last cmd with same args, used for timeout reties
     uint16_t getResponseBuffer(uint8_t idx); // get 16bit word at this index in response buffer
+	uint8_t* getResponseBuffer(); // get pointer to response buffer
     void     clearResponseBuffer();
+	void 	endianConvertResponseBuffer();
     uint16_t getResponseBufferLength(); // number of values in response buffer is 0 on error
     uint8_t getSlaveId();
     uint16_t getAddress();
     uint16_t getQty();
     uint8_t getFunction();
     void oneTimeDelay(uint16_t delay_ms); // adds this delay before next cmd is sent, but only the next one
+#ifdef DEBUG_SERIAL
     void printHex(uint8_t i, Print& out); //prints 8bit int as hex prepending 0x and padding with leading zero if necessary
     void printHex(uint8_t i, Print* outPtr);
+#endif
 
     // Modbus exception codes
     /**
@@ -263,7 +267,7 @@ class NonBlockingModbusMaster {
     uint8_t u8MBStatus;
     uint8_t u8BytesLeft;
     uint32_t u32StartTime;
-    static  const uint8_t maxTXLen = 128;
+    static  const uint8_t maxTXLen = 128;						// pripadne az 252
     // use ESP32 setTxBufferSize( ) before begin,  default is 128 if this needs to be larger
     uint8_t u8ModbusADU[maxTXLen];
     uint8_t u8ModbusADUSize;// = 0;
@@ -275,7 +279,7 @@ class NonBlockingModbusMaster {
   private:
     Stream* _serial;                                             ///< reference to serial port object
     uint8_t  _u8MBSlave;                                         ///< Modbus slave (1..255) initialized in begin()
-    static const uint8_t ku8MaxBufferSize                = 64;   ///< size of response/transmit buffers
+    static const uint8_t ku8MaxBufferSize                = 64;   ///< size of response/transmit buffers, pripadne az 126
     uint16_t _u16ReadAddress;                                    ///< slave register from which to read
     uint16_t _u16ReadQty;                                        ///< quantity of words to read
     uint16_t _u16ResponseBuffer[ku8MaxBufferSize];               ///< buffer to store Modbus slave response; read via GetResponseBuffer()

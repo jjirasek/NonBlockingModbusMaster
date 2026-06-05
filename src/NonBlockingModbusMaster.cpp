@@ -44,8 +44,6 @@ Also see LICENSE.txt for original ModbusMaster license.
 /* _____GLOBAL VARIABLES_____________________________________________________ */
 #ifdef DEBUG_SERIAL
 static Print* modbusDebugPtr = &Serial;
-#else
-static Print* modbusDebugPtr = NULL;
 #endif
 
 // 2 x 16bit to 32bit
@@ -60,6 +58,7 @@ uint32_t make_32bit_from_2x16bit_words(uint16_t hi_word, uint16_t lo_word) {
   return bits16_32.word_32bit;
 }
 
+#ifdef DEBUG_SERIAL
 void NonBlockingModbusMaster::printHex(uint8_t i, Print& out) {
   out.print("0x");
   if (i < 16) {
@@ -74,6 +73,7 @@ void NonBlockingModbusMaster::printHex(uint8_t i, Print* outPtr) {
   }
   printHex(i,*outPtr);
 }
+#endif
 
 /* _____PUBLIC FUNCTIONS_____________________________________________________ */
 /**
@@ -236,6 +236,16 @@ uint16_t NonBlockingModbusMaster::getResponseBuffer(uint8_t u8Index) {
   }
 }
 
+void NonBlockingModbusMaster::endianConvertResponseBuffer() {
+	// prevod na big/little endian
+	for (uint8_t i = 0; i < _u8ResponseBufferLength; i++) {
+		_u16ResponseBuffer[i] = (_u16ResponseBuffer[i] << 8) | (_u16ResponseBuffer[i] >> 8);
+	}
+}
+
+uint8_t* NonBlockingModbusMaster::getResponseBuffer() {
+	return (uint8_t*)_u16ResponseBuffer;
+}
 
 /**
   Clear Modbus response buffer.
@@ -755,7 +765,8 @@ bool NonBlockingModbusMaster::justFinished() {
     return false;
   }
   if (modbusState == MB_PRE_DELAY) {
-    if ((micros() - u32StartTime) > (_preDelay_us + (_oneTimeDelay_ms * 1000))) {
+    if ((micros() - u32StartTime) > (_preDelay_us + (_oneTimeDelay_ms * 1000)) ||
+		(micros() < u32StartTime) && (micros() + UINT32_MAX + 1 - u32StartTime) > (_preDelay_us + (_oneTimeDelay_ms * 1000))) {
       modbusState = MB_SEND; // continue below
       _oneTimeDelay_ms = 0; // clear it now
     } else {
@@ -766,35 +777,33 @@ bool NonBlockingModbusMaster::justFinished() {
   if (modbusState == MB_SEND) {
     int i = 0;
     // flush receive buffer before transmitting request
-    if (modbusDebugPtr) {
-      modbusDebugPtr->println();
-      modbusDebugPtr->print("Flush input : ");
-    }
+#ifdef DEBUG_SERIAL
+    modbusDebugPtr->println();
+    modbusDebugPtr->print("Flush input : ");
+#endif
     while (1) {
       int i = _serial->read();
       if (i != -1) {
-        if (modbusDebugPtr) {
-          printHex(i,modbusDebugPtr);
-        }
+#ifdef DEBUG_SERIAL
+        printHex(i,modbusDebugPtr);
+#endif
       } else {
         break;
       }
     }
-    if (modbusDebugPtr) {
-      modbusDebugPtr->println(" -- end flush -- ");
-    }
-    if (modbusDebugPtr) {
-      modbusDebugPtr->print("Send Cmd : ");
-    }
+#ifdef DEBUG_SERIAL
+    modbusDebugPtr->println(" -- end flush -- ");
+    modbusDebugPtr->print("Send Cmd : ");
+#endif
     for (i = 0; i < u8ModbusADUSize; i++) {
       _serial->write(u8ModbusADU[i]);
-      if (modbusDebugPtr) {
-        printHex(u8ModbusADU[i],modbusDebugPtr);
-      }
+#ifdef DEBUG_SERIAL
+      printHex(u8ModbusADU[i],modbusDebugPtr);
+#endif
     }
-    if (modbusDebugPtr) {
-      modbusDebugPtr->println();
-    }
+#ifdef DEBUG_SERIAL
+    modbusDebugPtr->println();
+#endif
     u8ModbusADUSize = 0;
     u32StartTime = micros();
     modbusState = MB_POST_DELAY;
@@ -802,12 +811,13 @@ bool NonBlockingModbusMaster::justFinished() {
   }
 
   if (modbusState == MB_POST_DELAY) {
-    if ((micros() - u32StartTime) > _postDelay_us) {
+    if ((micros() - u32StartTime) > _postDelay_us || 
+		(micros() < u32StartTime) && (micros() + UINT32_MAX + 1 - u32StartTime) > _postDelay_us) {
       modbusState = MB_RECEIVE; // continue below
       u32StartTime = millis();
-      if (modbusDebugPtr) {
-        modbusDebugPtr->print("Received : ");
-      }
+#ifdef DEBUG_SERIAL
+      modbusDebugPtr->print("Received : ");
+#endif
     } else {
       return false;
     }
@@ -825,9 +835,9 @@ bool NonBlockingModbusMaster::justFinished() {
     while (u8BytesLeft) {
       if (_serial->available()) {
         u8ModbusADU[u8ModbusADUSize++] = _serial->read();
-        if (modbusDebugPtr) {
-          printHex(u8ModbusADU[u8ModbusADUSize - 1],modbusDebugPtr);
-        }
+#ifdef DEBUG_SERIAL
+        printHex(u8ModbusADU[u8ModbusADUSize - 1],modbusDebugPtr);
+#endif
         u8BytesLeft--;
       } else {
         return false; // no more available for now
@@ -939,9 +949,9 @@ bool NonBlockingModbusMaster::justFinished() {
     _u8TransmitBufferIndex = 0;
    // u16TransmitBufferLength = 0; keep the Tx buffer intack for retries
     _u8ResponseBufferIndex = 0;
-    if (modbusDebugPtr) {
-      modbusDebugPtr->println();
-    }
+#ifdef DEBUG_SERIAL
+    modbusDebugPtr->println();
+#endif
     modbusState = MB_END;
     return false; // u8MBStatus saved // next call will return true and set to IDLE if not running another chained cmd
   }  // end  if (mobusState == MB_RECEIVE) {
